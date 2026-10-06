@@ -1,0 +1,190 @@
+{
+  "generated_at": "2026-10-04T20:18:45.944919+00:00",
+  "sklearn_version": "1.9.1",
+  "dataset": {
+    "path": "ml\\data\\dataset.csv",
+    "rows": 10400,
+    "train_rows": 7800,
+    "test_rows": 2600,
+    "attack_fraction": 0.2308
+  },
+  "fpr_budget": 0.01,
+  "selected_model": "random_forest",
+  "models": {
+    "isolation_forest": {
+      "threshold": 0.604,
+      "precision": 0.967,
+      "recall": 0.635,
+      "f1": 0.7666,
+      "roc_auc": 0.9652,
+      "false_positive_rate": 0.0065,
+      "confusion_matrix": {
+        "tn": 1987,
+        "fp": 13,
+        "fn": 219,
+        "tp": 381
+      }
+    },
+    "random_forest": {
+      "threshold": 0.4883,
+      "precision": 0.9949,
+      "recall": 0.985,
+      "f1": 0.9899,
+      "roc_auc": 0.9982,
+      "false_positive_rate": 0.0015,
+      "confusion_matrix": {
+        "tn": 1997,
+        "fp": 3,
+        "fn": 9,
+        "tp": 591
+      },
+      "cv_oof_f1": 0.9844
+    },
+    "gradient_boosting": {
+      "threshold": 0.1567,
+      "precision": 0.9801,
+      "recall": 0.9833,
+      "f1": 0.9817,
+      "roc_auc": 0.9977,
+      "false_positive_rate": 0.006,
+      "confusion_matrix": {
+        "tn": 1988,
+        "fp": 12,
+        "fn": 10,
+        "tp": 590
+      },
+      "cv_oof_f1": 0.9807
+    }
+  },
+  "per_scenario_test": {
+    "browser_cache": {
+      "label": "benign",
+      "n": 130,
+      "alert_rate": 0.0
+    },
+    "bulk_rename": {
+      "label": "benign",
+      "n": 113,
+      "alert_rate": 0.0
+    },
+    "cloud_sync": {
+      "label": "benign",
+      "n": 111,
+      "alert_rate": 0.0
+    },
+    "code_build": {
+      "label": "benign",
+      "n": 149,
+      "alert_rate": 0.0
+    },
+    "doc_editing": {
+      "label": "benign",
+      "n": 290,
+      "alert_rate": 0.0
+    },
+    "encrypt_copy_delete": {
+      "label": "attack",
+      "n": 88,
+      "alert_rate": 0.9545
+    },
+    "fast_rename_encrypt": {
+      "label": "attack",
+      "n": 163,
+      "alert_rate": 0.9939
+    },
+    "idle": {
+      "label": "benign",
+      "n": 316,
+      "alert_rate": 0.0
+    },
+    "inplace_stealth": {
+      "label": "attack",
+      "n": 83,
+      "alert_rate": 1.0
+    },
+    "legit_encrypted_backup": {
+      "label": "benign",
+      "n": 93,
+      "alert_rate": 0.0
+    },
+    "log_rotation": {
+      "label": "benign",
+      "n": 99,
+      "alert_rate": 0.0
+    },
+    "ml_checkpoint": {
+      "label": "benign",
+      "n": 82,
+      "alert_rate": 0.0366
+    },
+    "office_save": {
+      "label": "benign",
+      "n": 130,
+      "alert_rate": 0.0
+    },
+    "package_install": {
+      "label": "benign",
+      "n": 130,
+      "alert_rate": 0.0
+    },
+    "partial_encryption": {
+      "label": "attack",
+      "n": 82,
+      "alert_rate": 0.9878
+    },
+    "photo_editing": {
+      "label": "benign",
+      "n": 97,
+      "alert_rate": 0.0
+    },
+    "photo_import": {
+      "label": "benign",
+      "n": 153,
+      "alert_rate": 0.0
+    },
+    "random_extension": {
+      "label": "attack",
+      "n": 94,
+      "alert_rate": 1.0
+    },
+    "slow_attack": {
+      "label": "attack",
+      "n": 90,
+      "alert_rate": 0.9667
+    },
+    "zip_and_cleanup": {
+      "label": "benign",
+      "n": 107,
+      "alert_rate": 0.0
+    }
+  },
+  "generalisation_unseen_family": {
+    "partial_encryption": {
+      "n_test": 82,
+      "recall_when_unseen": 0.9878,
+      "recall_when_seen": 0.9878
+    },
+    "inplace_stealth": {
+      "n_test": 83,
+      "recall_when_unseen": 0.988,
+      "recall_when_seen": 1.0
+    },
+    "random_extension": {
+      "n_test": 94,
+      "recall_when_unseen": 1.0,
+      "recall_when_seen": 1.0
+    }
+  },
+  "feature_importances": {
+    "frac_high_entropy_unexpected": 0.2947179568001529,
+    "mean_entropy_delta": 0.29416734823583784,
+    "unknown_ext_count": 0.1268945967879744,
+    "unique_dirs": 0.10729881256637921,
+    "frac_high_entropy": 0.05487292535391431,
+    "pct_extension_changed": 0.03680393776891365,
+    "delete_create_ratio": 0.030846713154166146,
+    "events_per_sec": 0.019496474050028516,
+    "renames_per_sec": 0.019101955539294942,
+    "files_written_per_sec": 0.01579927974333824
+  }
+}

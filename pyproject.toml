@@ -1,0 +1,55 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ransomware-recovery-agent"
+version = "0.1.0"
+description = "Cloud-native backup, ransomware detection, and AI-assisted recovery service."
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "pydantic>=2.7",
+    "pydantic-settings>=2.3",
+    "boto3>=1.34",
+    "sqlalchemy>=2.0",
+    "numpy>=1.26",
+    "pandas>=2.2",
+    "scikit-learn>=1.5",
+    "joblib>=1.4",
+    "watchdog>=4.0",
+    "anthropic>=1.0",
+    "sentence-transformers>=3.0",
+    "faiss-cpu>=1.8",
+    "tzdata>=2024.1",  # zoneinfo database on Windows / slim images
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.2",
+    "httpx>=0.27",
+    "moto[s3]>=5.0",
+    "ruff>=0.5",
+]
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM"]
+# FastAPI's Depends() in default args is idiomatic, not a bug.
+ignore = ["B008"]
+
+[tool.ruff.lint.per-file-ignores]
+# Exploratory notebooks: long display lines and sys.path tweaks before imports are fine.
+"*.ipynb" = ["E501", "B905", "E402"]

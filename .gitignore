@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+.venv/
+.env
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+build/
+dist/
+
+# Runtime data
+data/
+sandbox/
+restore_out/
+ml/artifacts/*.joblib
+ml/data/

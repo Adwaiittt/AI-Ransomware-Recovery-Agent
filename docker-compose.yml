@@ -1,0 +1,82 @@
+# Local stack: MinIO (S3) + API + watcher.
+#   cp .env.example .env   (set AWS_SECRET_ACCESS_KEY; optionally ANTHROPIC_API_KEY)
+#   docker compose up -d --build
+#
+# The watched tree, metadata DB and restore output live in named volumes
+# shared by api + watcher. Named volumes (not host bind mounts) because:
+#   * inotify events propagate between containers on the same volume, but not
+#     reliably from a Windows/macOS host folder into a Linux container;
+#   * the non-root container user can always write to them.
+# Inspect files with:  docker compose exec api ls -R sandbox/watched
+
+x-app-env: &app-env
+  STORAGE_MODE: local
+  S3_ENDPOINT_URL: http://minio:9000
+  DATABASE_URL: sqlite:////app/data/metadata.db
+  WATCH_DIR: /app/sandbox/watched
+  RESTORE_DIR: /app/restore_out
+  MODEL_PATH: /app/ml/artifacts/model.joblib
+  LOG_FORMAT: json
+
+services:
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000" # S3 API
+      - "9001:9001" # web console
+    environment:
+      MINIO_ROOT_USER: ${AWS_ACCESS_KEY_ID:?set AWS_ACCESS_KEY_ID in .env}
+      MINIO_ROOT_PASSWORD: ${AWS_SECRET_ACCESS_KEY:?set AWS_SECRET_ACCESS_KEY in .env}
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: .
+    image: ransomware-recovery-agent:latest
+    env_file:
+      - path: .env
+        required: false
+    environment: *app-env
+    ports:
+      - "8000:8000"
+    volumes:
+      - app-data:/app/data
+      - sandbox:/app/sandbox
+      - restore-out:/app/restore_out
+    depends_on:
+      minio:
+        condition: service_healthy
+    restart: unless-stopped
+
+  watcher:
+    image: ransomware-recovery-agent:latest
+    command: ["python", "-m", "app.detection.monitor"]
+    env_file:
+      - path: .env
+        required: false
+    environment: *app-env
+    volumes:
+      - app-data:/app/data
+      - sandbox:/app/sandbox
+    depends_on:
+      api: # api creates the DB schema and watch dir on startup
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-m", "app.detection.monitor", "--check"]
+      interval: 15s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+    restart: unless-stopped
+
+volumes:
+  minio-data:
+  app-data:
+  sandbox:
+  restore-out:

@@ -1,0 +1,5 @@
+# Normalise to LF in the repo (Dockerfile, Makefile, YAML and shell break with CRLF).
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.gif binary
