@@ -190,6 +190,12 @@ class VectorIndex:
     def sync(self, session: Session) -> dict[str, int]:
         """Bring stored chunks + FAISS index in line with the DB. Returns stats."""
         with self._lock:
+            # Fingerprint BEFORE reading the data. Embedding can take seconds (the
+            # first call loads the model); if another process writes meanwhile,
+            # an end-of-sync fingerprint would describe data this index never
+            # saw and mark it "fresh" forever. A start-of-sync fingerprint can
+            # only cause one extra sync, never a stale index.
+            fingerprint = db_fingerprint(session)
             specs = {c.key: c for c in build_chunks(session)}
             existing = {row.key: row for row in session.scalars(select(AgentChunk))}
 
@@ -218,7 +224,7 @@ class VectorIndex:
             session.commit()
 
             self._rebuild(session)
-            self._fingerprint = db_fingerprint(session)
+            self._fingerprint = fingerprint
             stats = {"chunks": len(specs), "embedded": len(to_embed), "removed": len(stale)}
             logger.info("agent index synced", extra=stats)
             return stats

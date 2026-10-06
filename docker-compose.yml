@@ -1,4 +1,9 @@
-# Local stack: MinIO (S3) + API + watcher.
+# Local stack: S3-compatible object store + API + watcher.
+#
+# Object store: RustFS, a MinIO-compatible server. MinIO stopped publishing
+# community images (minio/minio and quay.io/minio/minio no longer pull), so the
+# stack uses RustFS locally. The app only knows S3_ENDPOINT_URL, so any
+# S3-compatible store (or real AWS S3 with STORAGE_MODE=cloud) works unchanged.
 #   cp .env.example .env   (set AWS_SECRET_ACCESS_KEY; optionally ANTHROPIC_API_KEY)
 #   docker compose up -d --build
 #
@@ -11,7 +16,7 @@
 
 x-app-env: &app-env
   STORAGE_MODE: local
-  S3_ENDPOINT_URL: http://minio:9000
+  S3_ENDPOINT_URL: http://s3:9000
   DATABASE_URL: sqlite:////app/data/metadata.db
   WATCH_DIR: /app/sandbox/watched
   RESTORE_DIR: /app/restore_out
@@ -19,22 +24,23 @@ x-app-env: &app-env
   LOG_FORMAT: json
 
 services:
-  minio:
-    image: minio/minio:latest
-    command: server /data --console-address ":9001"
+  s3:
+    image: rustfs/rustfs:latest
     ports:
-      - "9000:9000" # S3 API
-      - "9001:9001" # web console
+      - "${S3_PORT:-9000}:9000" # S3 API
+      - "${S3_CONSOLE_PORT:-9001}:9001" # web console
     environment:
-      MINIO_ROOT_USER: ${AWS_ACCESS_KEY_ID:?set AWS_ACCESS_KEY_ID in .env}
-      MINIO_ROOT_PASSWORD: ${AWS_SECRET_ACCESS_KEY:?set AWS_SECRET_ACCESS_KEY in .env}
+      RUSTFS_ACCESS_KEY: ${AWS_ACCESS_KEY_ID:?set AWS_ACCESS_KEY_ID in .env}
+      RUSTFS_SECRET_KEY: ${AWS_SECRET_ACCESS_KEY:?set AWS_SECRET_ACCESS_KEY in .env}
+      RUSTFS_CONSOLE_ENABLE: "true"
     volumes:
-      - minio-data:/data
+      - s3-data:/data
     healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
+      # Any HTTP answer (even 403 for an unsigned request) means the server is up.
+      test: ["CMD", "curl", "-s", "-o", "/dev/null", "http://127.0.0.1:9000/"]
       interval: 5s
       timeout: 5s
-      retries: 10
+      retries: 12
 
   api:
     build: .
@@ -44,13 +50,13 @@ services:
         required: false
     environment: *app-env
     ports:
-      - "8000:8000"
+      - "${API_PORT:-8000}:8000" # host port overridable: API_PORT=8080 docker compose up
     volumes:
       - app-data:/app/data
       - sandbox:/app/sandbox
       - restore-out:/app/restore_out
     depends_on:
-      minio:
+      s3:
         condition: service_healthy
     restart: unless-stopped
 
@@ -76,7 +82,7 @@ services:
     restart: unless-stopped
 
 volumes:
-  minio-data:
+  s3-data:
   app-data:
   sandbox:
   restore-out:

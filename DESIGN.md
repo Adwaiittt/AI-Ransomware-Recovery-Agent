@@ -327,7 +327,7 @@ case is now handled and has a regression test.
   - the non-root user can always write to a named volume
 - `MONITOR_POLLING=true` switches watchdog to polling for bind-mount setups.
 - Healthchecks:
-  - minio: `mc ready`
+  - s3 (RustFS): `curl` to the S3 port (any HTTP answer, even 403, means it is up)
   - api: `/health` (DB + S3)
   - watcher: `python -m app.detection.monitor --check` (heartbeat age ≤ 3 windows)
 - The watcher starts only after the api is healthy, because the api creates
@@ -348,3 +348,28 @@ case is now handled and has a regression test.
 SQLite runs in WAL mode on a shared volume (same kernel), which is fine for one
 writer per table at laptop scale. `DATABASE_URL` accepts Postgres for anything
 bigger; the code uses only portable SQLAlchemy.
+
+### Lessons from the first real `docker compose up`
+- **The object store image disappeared.** MinIO stopped publishing community
+  images (`minio/minio`, `quay.io/minio/minio`). It was replaced with RustFS
+  after a probe confirmed:
+  - put/head/get/list work
+  - custom metadata survives
+  - wrong credentials are rejected (`SignatureDoesNotMatch`)
+
+  No application code changed. This is the payoff of keeping storage behind
+  `S3_ENDPOINT_URL`.
+- **Host port clash.** Another local stack already held port 8000. Host ports
+  are now configurable (`API_PORT`, `S3_PORT`, `S3_CONSOLE_PORT`) instead of
+  hard-coded.
+- **Index freshness race (TOCTOU).** In the container, the first embed loads
+  MiniLM and torch, which takes about 25 s. A background re-index read the DB
+  (1 snapshot), spent 25 s embedding, and only then recorded the DB
+  fingerprint. By that time the watcher had added an incident and the API a
+  new snapshot. The index stayed stale while claiming to be fresh.
+
+  Fixes:
+  - the fingerprint is read at the **start** of a sync, so a concurrent write
+    can only cause one extra sync, never a stale index
+  - the embedder is warmed in a background thread at startup
+  - a regression test writes to the DB mid-sync

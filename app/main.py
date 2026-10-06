@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
@@ -20,6 +21,13 @@ from app.logging_config import RequestIdMiddleware, configure_logging
 from app.storage.s3_client import S3Storage, StorageError
 
 logger = logging.getLogger(__name__)
+
+
+def _warm_embedder(index: VectorIndex) -> None:
+    try:
+        index.embedder.embed(["warm-up"])
+    except Exception:  # never fatal: the first real search just loads it instead
+        logger.warning("embedding model warm-up failed", exc_info=True)
 
 
 def create_app(
@@ -62,6 +70,9 @@ def create_app(
         # download nor an API key is needed just to start the API.
         index = VectorIndex(embedder or make_embedder(settings.embedding_model))
         app.state.retriever = Retriever(index, settings.agent_timezone)
+        # Warm the embedder in the background (MiniLM + torch import takes ~25 s in
+        # the container) so the first search/re-index doesn't pay for it.
+        threading.Thread(target=_warm_embedder, args=(index,), daemon=True).start()
         app.state.agent_client = agent_client
         app.state.agent = None
         yield

@@ -16,9 +16,9 @@ env: ## create .env from the example if missing
 install: ## local dev install (venv recommended)
 	$(PY) -m pip install -e ".[dev]"
 
-up: env ## build and start minio + api + watcher
+up: env ## build and start s3 + api + watcher
 	$(COMPOSE) up -d --build
-	@echo "API http://localhost:8000/docs  |  MinIO console http://localhost:9001"
+	@echo "API http://localhost:8000/docs  |  object store console http://localhost:9001"
 
 down: ## stop the stack (volumes kept)
 	$(COMPOSE) down

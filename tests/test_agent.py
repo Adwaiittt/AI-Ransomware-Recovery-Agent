@@ -323,3 +323,30 @@ def test_agent_without_credentials_is_503_not_500(
         r = c.post("/agent/ask", json={"question": "What changed today?"})
         assert r.status_code == 503
         assert "not configured" in r.json()["detail"]
+
+
+def test_write_during_sync_is_not_masked_as_fresh(
+    db: Session, storage: S3Storage, watch_dir: Path, settings: Settings
+) -> None:
+    """Regression: a snapshot written while the index is embedding (e.g. first-call
+    model load) must trigger another sync, not be hidden behind a stale fingerprint."""
+    from app.db.session import make_engine, make_session_factory
+
+    other = make_session_factory(make_engine(settings.database_url))
+    create_snapshot(db, storage, watch_dir)
+
+    class SlowEmbedder(HashingEmbedder):
+        fired = False
+
+        def embed(self, texts: list[str]) -> np.ndarray:
+            if not SlowEmbedder.fired:  # another process writes mid-sync
+                SlowEmbedder.fired = True
+                with other() as s:
+                    create_snapshot(s, storage, watch_dir, label="concurrent")
+            return super().embed(texts)
+
+    index = VectorIndex(SlowEmbedder())
+    assert index.sync(db)["chunks"] == 1  # saw only the first snapshot
+    assert index.ensure_fresh(db) is True  # must notice the concurrent write
+    keys = [h.key for h in index.search(db, "snapshot", k=10)]
+    assert sum(k.startswith("snapshot:") for k in keys) == 2

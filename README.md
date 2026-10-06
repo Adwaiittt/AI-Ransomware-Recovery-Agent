@@ -7,7 +7,7 @@ A backup and recovery service. It:
 - **restores the last clean snapshot** and verifies every file by SHA-256
 - answers questions like *"What changed on Tuesday, and is it safe to restore?"* through a **Claude-powered RAG agent** over the backup metadata
 
-FastAPI · boto3 (MinIO / AWS S3) · watchdog · scikit-learn · SQLAlchemy · Anthropic SDK · sentence-transformers + FAISS · Docker Compose
+FastAPI · boto3 (any S3: RustFS/MinIO locally, AWS S3 in cloud) · watchdog · scikit-learn · SQLAlchemy · Anthropic SDK · sentence-transformers + FAISS · Docker Compose
 
 > 📽️ _Demo GIF placeholder: `docs/demo.gif` (record `make demo`)_
 
@@ -28,7 +28,7 @@ flowchart LR
         AG[POST /agent/ask]
         IDX[RAG index<br/>MiniLM + FAISS]
     end
-    S3[(MinIO / S3<br/>objects/sha256<br/>manifests/)]
+    S3[(S3-compatible store<br/>RustFS locally / AWS S3<br/>objects/sha256<br/>manifests/)]
     DB[(SQLite / Postgres<br/>snapshots · files · incidents<br/>restore_jobs · chunks)]
     CL[[Claude API]]
 
@@ -49,12 +49,16 @@ flowchart LR
 
 ```bash
 cp .env.example .env     # set AWS_SECRET_ACCESS_KEY (>= 8 chars); optionally ANTHROPIC_API_KEY
-make up                  # build image (trains the model inside), start minio + api + watcher
+make up                  # build image (trains the model inside), start s3 + api + watcher
 make demo                # seed → snapshot → attack → detect → ask agent → restore → verify
 ```
 
 - API docs: http://localhost:8000/docs
-- MinIO console: http://localhost:9001
+- Object store console: http://localhost:9001
+
+Port 8000 already taken? Run `API_PORT=8080 make up` instead. `S3_PORT` and `S3_CONSOLE_PORT` work the same way.
+
+> **Why RustFS and not MinIO:** MinIO stopped publishing community Docker images, so `minio/minio` no longer pulls. Compose runs [RustFS](https://github.com/rustfs/rustfs), an S3/MinIO-compatible server, instead. The app only knows `S3_ENDPOINT_URL`, so MinIO, SeaweedFS or real AWS S3 (`STORAGE_MODE=cloud`) work without code changes.
 
 `make simulate` runs only the safe attack simulator, and `make logs` follows the JSON logs.
 
@@ -64,7 +68,7 @@ make demo                # seed → snapshot → attack → detect → ask agent
 python -m venv .venv && .venv/Scripts/activate        # source .venv/bin/activate on Linux/macOS
 pip install -e ".[dev]"
 python -m ml.generate_dataset && python -m ml.train   # = make train
-docker compose up -d minio                            # or any S3 endpoint (see .env.example)
+docker compose up -d s3                               # or any S3 endpoint (see .env.example)
 uvicorn app.main:app                                  # terminal 1
 python -m app.detection.monitor                       # terminal 2
 python scripts/demo.py --watch-dir sandbox/watched    # terminal 3 (= make demo)
@@ -155,7 +159,7 @@ From `ml/artifacts/metrics.json` (`python -m ml.train`, seed 42, reproducible ru
 - **Snapshots run inside the request.** There is no job queue and no retention or GC policy for blobs.
 - **SQLite is shared by two containers.** Fine on one host; use `DATABASE_URL=postgresql://…` beyond that.
 - **The agent is only as good as the indexed metadata.** It does not read file contents (by design: privacy and prompt injection).
-- **Docker image build is unverified.** It was not run on the author's machine (WSL unavailable); CI builds it.
+- **The image is large (2.5 GB),** mostly torch (CPU) and sentence-transformers. A smaller option is an ONNX MiniLM runtime instead of torch.
 
 ## Future work
 
