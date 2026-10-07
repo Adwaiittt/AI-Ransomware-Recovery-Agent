@@ -4,7 +4,7 @@
 # community images (minio/minio and quay.io/minio/minio no longer pull), so the
 # stack uses RustFS locally. The app only knows S3_ENDPOINT_URL, so any
 # S3-compatible store (or real AWS S3 with STORAGE_MODE=cloud) works unchanged.
-#   cp .env.example .env   (set AWS_SECRET_ACCESS_KEY; optionally ANTHROPIC_API_KEY)
+#   python scripts/init_env.py   (creates .env with a random object-store secret)
 #   docker compose up -d --build
 #
 # The watched tree, metadata DB and restore output live in named volumes
@@ -22,13 +22,14 @@ x-app-env: &app-env
   RESTORE_DIR: /app/restore_out
   MODEL_PATH: /app/ml/artifacts/model.joblib
   LOG_FORMAT: json
+  ENABLE_LAB: ${ENABLE_LAB:-false} # dashboard Lab tab; set ENABLE_LAB=true in .env for the demo
 
 services:
   s3:
     image: rustfs/rustfs:latest
     ports:
-      - "${S3_PORT:-9000}:9000" # S3 API
-      - "${S3_CONSOLE_PORT:-9001}:9001" # web console
+      - "127.0.0.1:${S3_PORT:-9000}:9000" # S3 API (this machine only)
+      - "127.0.0.1:${S3_CONSOLE_PORT:-9001}:9001" # web console (this machine only)
     environment:
       RUSTFS_ACCESS_KEY: ${AWS_ACCESS_KEY_ID:?set AWS_ACCESS_KEY_ID in .env}
       RUSTFS_SECRET_KEY: ${AWS_SECRET_ACCESS_KEY:?set AWS_SECRET_ACCESS_KEY in .env}
@@ -50,7 +51,9 @@ services:
         required: false
     environment: *app-env
     ports:
-      - "${API_PORT:-8000}:8000" # host port overridable: API_PORT=8080 docker compose up
+      # 127.0.0.1 only: the API has no login, so it must not be reachable from the
+      # network. Host port overridable: API_PORT=8080 docker compose up
+      - "127.0.0.1:${API_PORT:-8000}:8000"
     volumes:
       - app-data:/app/data
       - sandbox:/app/sandbox

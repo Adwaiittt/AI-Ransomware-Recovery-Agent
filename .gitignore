@@ -1,16 +1,54 @@
+# --- Secrets / local config (never commit) ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa*
+credentials*.json
+service-account*.json
+
+# --- Python ---
 __pycache__/
 *.py[cod]
 .venv/
-.env
-.pytest_cache/
-.ruff_cache/
+venv/
+env/
 *.egg-info/
 build/
 dist/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+coverage.xml
+htmlcov/
+.ipynb_checkpoints/
 
-# Runtime data
+# --- Runtime data (local DB, backups, simulator sandbox, restores, logs) ---
 data/
 sandbox/
 restore_out/
+*.db
+*.sqlite
+*.sqlite3
+*.log
+
+# --- ML artifacts: model is rebuilt by `python -m ml.train`; metrics.json is kept ---
 ml/artifacts/*.joblib
 ml/data/
+
+# --- Local screenshots (not published) ---
+docs/*.jpg
+docs/*.png
+docs/*.gif
+
+# --- IDE / OS ---
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini

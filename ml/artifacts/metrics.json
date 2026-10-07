@@ -1,8 +1,8 @@
 {
-  "generated_at": "2026-10-04T20:18:45.944919+00:00",
+  "generated_at": "2026-10-07T09:53:18.376497+00:00",
   "sklearn_version": "1.9.1",
   "dataset": {
-    "path": "ml\\data\\dataset.csv",
+    "path": "ml/data/dataset.csv",
     "rows": 10400,
     "train_rows": 7800,
     "test_rows": 2600,

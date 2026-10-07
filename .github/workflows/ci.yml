@@ -14,10 +14,10 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - name: Install (CPU-only torch keeps the install small)
+      - name: Install (pinned versions from requirements.lock; CPU-only torch)
         run: |
-          pip install --index-url https://download.pytorch.org/whl/cpu torch
-          pip install -e ".[dev]"
+          pip install --extra-index-url https://download.pytorch.org/whl/cpu \
+            -c requirements.lock -e ".[dev]"
       - name: Ruff
         run: |
           ruff check app tests ml simulator scripts

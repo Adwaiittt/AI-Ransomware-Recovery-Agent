@@ -350,3 +350,20 @@ def test_write_during_sync_is_not_masked_as_fresh(
     assert index.ensure_fresh(db) is True  # must notice the concurrent write
     keys = [h.key for h in index.search(db, "snapshot", k=10)]
     assert sum(k.startswith("snapshot:") for k in keys) == 2
+
+
+def test_dry_runs_are_not_indexed(
+    db: Session, storage: S3Storage, watch_dir: Path, settings: Settings
+) -> None:
+    from app.restore.restorer import run_restore
+
+    snap = create_snapshot(db, storage, watch_dir)
+    common = dict(
+        snapshot_id=snap.id, target_path=None, watch_dir=watch_dir, restore_dir=settings.restore_dir
+    )
+    run_restore(db, storage, dry_run=True, **common)
+    run_restore(db, storage, dry_run=False, **common)
+    index = VectorIndex(HashingEmbedder())
+    index.sync(db)
+    keys = [h.key for h in index.search(db, "restore job", k=10, kinds=["restore"])]
+    assert keys == ["restore:2"]  # only the real restore

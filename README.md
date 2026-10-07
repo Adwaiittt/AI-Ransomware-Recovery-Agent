@@ -9,7 +9,20 @@ A backup and recovery service. It:
 
 FastAPI · boto3 (any S3: RustFS/MinIO locally, AWS S3 in cloud) · watchdog · scikit-learn · SQLAlchemy · Anthropic SDK · sentence-transformers + FAISS · Docker Compose
 
-> 📽️ _Demo GIF placeholder: `docs/demo.gif` (record `make demo`)_
+## Dashboard
+
+Open **http://localhost:8000** after `make up` (it redirects to `/ui/`). It is a single page served by the API itself: plain HTML/CSS/JS with no build step and no CDN, so it works offline. It has six tabs:
+
+| Tab | What you can do |
+|---|---|
+| **Overview** | Recovery-flow stepper (protected → attack detected → restore point → restored & verified → all clear), stats, activity timeline |
+| **Snapshots** | Snapshot now, browse files sorted by entropy, **compare any two snapshots** (extension changes with entropy before → after) |
+| **Detection** | Watcher heartbeat and live score vs threshold, model metrics, **scan now**, incidents with *why it fired* (feature z-scores), resolve |
+| **Restore** | Recommended last clean snapshot, dry run, then a confirmed restore (in place + quarantine) showing SHA-256 verification; restore history |
+| **Ask the agent** | Questions in plain English; the answer comes with server-validated citations and recommendation. Without an API key it shows the retrieval step on its own |
+| **Lab** | Step-by-step safe simulation: seed → baseline → normal activity → attack → restore → clean, with a live watcher-score chart |
+
+The Lab tab is off by default. Set `ENABLE_LAB=true` in `.env` to use it for the local demo.
 
 ## Architecture
 
@@ -45,18 +58,45 @@ flowchart LR
 
 **Recovery flow:** clean snapshot → attack → watcher alerts (incident; later snapshots become `suspect`) → agent explains and *recommends* a snapshot → a human calls `POST /restore` (dry run first) → SHA-256 verified → incident resolved.
 
+## Requirements
+
+- **Docker** with Docker Compose v2 (Docker Desktop on Windows/macOS). This is enough for the full stack.
+- For local development or running tests: **Python 3.11+** (3.12 recommended).
+- Optional: an **Anthropic API key** for the agent. Everything else works without one.
+- Optional: `make`. Every target is a plain command, and the README shows each one.
+
+## Setup: the `.env` file
+
+All configuration comes from environment variables, loaded from `.env`. `.env.example` lists every variable with a comment. Create your `.env` with:
+
+```bash
+python scripts/init_env.py   # = make env; copies .env.example and fills a random object-store secret
+```
+
+| Variable | Required? | What it is |
+|---|---|---|
+| `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | **yes** (local) | Credentials of the local object store. `init_env.py` generates them. In cloud mode, leave them empty and use an IAM role. |
+| `ANTHROPIC_API_KEY` | optional | Turns on `/agent/ask`. Without it the agent returns 503 and the dashboard shows search results only. |
+| `ENABLE_LAB` | optional | `true` turns on the dashboard Lab tab (safe simulator). Default `false`. |
+| `ANTHROPIC_MODEL`, `AGENT_TIMEZONE`, `API_PORT`, ... | optional | See the comments in `.env.example`. |
+
+`.env` is gitignored. Never commit it.
+
 ## Quick start (Docker)
 
 ```bash
-cp .env.example .env     # set AWS_SECRET_ACCESS_KEY (>= 8 chars); optionally ANTHROPIC_API_KEY
-make up                  # build image (trains the model inside), start s3 + api + watcher
-make demo                # seed → snapshot → attack → detect → ask agent → restore → verify
+python scripts/init_env.py   # once
+docker compose up -d --build # = make up; builds the image (trains the model inside), starts s3 + api + watcher
+docker compose exec api python scripts/demo.py   # = make demo
 ```
 
+> **Local only by design:** the API and dashboard have no login, so every port is published on `127.0.0.1` and can't be reached from your network. See [SECURITY.md](SECURITY.md).
+
+- Dashboard: http://localhost:8000
 - API docs: http://localhost:8000/docs
 - Object store console: http://localhost:9001
 
-Port 8000 already taken? Run `API_PORT=8080 make up` instead. `S3_PORT` and `S3_CONSOLE_PORT` work the same way.
+Port 8000 already taken? Set `API_PORT=8080` in `.env` (or the environment) before starting. `S3_PORT` and `S3_CONSOLE_PORT` work the same way.
 
 > **Why RustFS and not MinIO:** MinIO stopped publishing community Docker images, so `minio/minio` no longer pulls. Compose runs [RustFS](https://github.com/rustfs/rustfs), an S3/MinIO-compatible server, instead. The app only knows `S3_ENDPOINT_URL`, so MinIO, SeaweedFS or real AWS S3 (`STORAGE_MODE=cloud`) work without code changes.
 
@@ -66,7 +106,8 @@ Port 8000 already taken? Run `API_PORT=8080 make up` instead. `S3_PORT` and `S3_
 
 ```bash
 python -m venv .venv && .venv/Scripts/activate        # source .venv/bin/activate on Linux/macOS
-pip install -e ".[dev]"
+pip install -e ".[dev]"                               # exact Docker/CI versions: add -c requirements.lock
+python scripts/init_env.py
 python -m ml.generate_dataset && python -m ml.train   # = make train
 docker compose up -d s3                               # or any S3 endpoint (see .env.example)
 uvicorn app.main:app                                  # terminal 1
@@ -112,6 +153,9 @@ With `ANTHROPIC_API_KEY` set, step 5 returns a Markdown answer with four section
 | POST | `/agent/ask` | `{question}` → answer + validated citations + recommendation |
 | GET  | `/agent/search` | Retrieval only (date parsing + vector search), no LLM call |
 | POST | `/agent/reindex` | Force RAG index sync |
+| GET  | `/info` | Non-secret runtime config (paths, flags) for the dashboard |
+| POST | `/lab/seed`, `/lab/benign`, `/lab/attack`, `/lab/clean` | Drive the sandbox-only simulator (`ENABLE_LAB=true` only; 404 otherwise) |
+| GET  | `/ui/` | Dashboard (strict CSP, no inline script) |
 
 Every response carries `X-Request-ID`, and the same id appears on every JSON log line for that request.
 

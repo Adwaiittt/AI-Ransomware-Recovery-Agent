@@ -373,3 +373,45 @@ bigger; the code uses only portable SQLAlchemy.
     can only cause one extra sync, never a stale index
   - the embedder is warmed in a background thread at startup
   - a regression test writes to the DB mid-sync
+
+## Dashboard
+
+- **No framework, no build, no CDN.** The page is static files served by the
+  same FastAPI app (`/ui`), so it works offline in the container and there is
+  no second service or CORS setup. Polling every 5 s is enough; push updates
+  (WebSocket/SSE) aren't worth the complexity at this scale.
+- **XSS by design, not by escaping.** File names, labels and agent answers
+  are attacker-influenced, because ransomware controls the disk we index.
+  - The JS builds DOM nodes with `textContent`, and a test fails the build
+    if `innerHTML` appears.
+  - The agent's Markdown is rendered by a tiny whitelist renderer (headings,
+    bullets, bold, code) into DOM nodes.
+  - `/ui` responses carry a strict CSP (`script-src 'self'`, no inline script
+    or style, `frame-ancestors 'none'`). Dynamic widths are set through CSSOM
+    (`style.cssText`), which the CSP allows, not through `style=""`
+    attributes, which it blocks.
+- **Lab endpoints** (`/lab/*`) wrap the same simulator guards: sandbox-only,
+  seeded-files-only, random bytes. They return **404 unless
+  `ENABLE_LAB=true`**, so they're invisible in a real deployment.
+- **Destructive actions confirm with the real plan.** "Restore…" first runs a
+  dry run and shows the actual counts (create / overwrite / unchanged / extras
+  to quarantine) in the confirm dialog.
+
+### Bugs the browser pass caught
+- **Stale restore selection (dangerous).** The selected snapshot was kept
+  across polls even after a new incident moved the recommendation. The
+  confirm dialog would have restored an *older* clean snapshot, discarding
+  newer good work. Now:
+  - the selection follows the recommendation whenever it changes, unless the
+    user explicitly picked another since
+  - the dialog states whether the target *is* the recommended point and warns
+    in red if not
+
+  Both paths were checked in the browser by simulating a moved recommendation.
+- **Arrays passed to native `append()`** rendered as `[object
+  HTMLHeadingElement]` in the diff view. A `fill()` helper now flattens
+  children.
+- **Retrieval noise.** Dry-run plans were indexed and outranked incidents and
+  diffs for "what changed today?". Dry runs change nothing, so they're
+  excluded from the RAG corpus; they remain in the audit log. A test covers
+  this.

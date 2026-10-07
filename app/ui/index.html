@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Recovery Console</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 2 4 7v8c0 7.5 5.1 13.4 12 15 6.9-1.6 12-7.5 12-15V7z' fill='%232f6fdf'/%3E%3Cpath d='m11 16 4 4 7-8' stroke='white' stroke-width='3' fill='none'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="styles.css">
+  <!-- All behaviour lives in app.js: the CSP forbids inline script. -->
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 2 4 7v8c0 7.5 5.1 13.4 12 15 6.9-1.6 12-7.5 12-15V7z"/><path class="tick" d="m11 16 4 4 7-8"/></svg>
+      <div>
+        <strong>Ransomware Recovery Console</strong>
+        <span class="muted small">backup · detect · restore · explain</span>
+      </div>
+    </div>
+    <div class="pills" id="status-pills" aria-live="polite"></div>
+    <button class="btn ghost small" id="refresh-btn" title="Refresh now">↻ Refresh</button>
+  </header>
+
+  <nav class="tabs" role="tablist">
+    <button role="tab" data-tab="overview" aria-selected="true">Overview</button>
+    <button role="tab" data-tab="snapshots">Snapshots</button>
+    <button role="tab" data-tab="detection">Detection</button>
+    <button role="tab" data-tab="restore">Restore</button>
+    <button role="tab" data-tab="agent">Ask the agent</button>
+    <button role="tab" data-tab="lab" id="lab-tab">Lab</button>
+  </nav>
+
+  <main>
+    <!-- OVERVIEW -->
+    <section id="tab-overview" class="tab active">
+      <div class="card">
+        <h2>Recovery flow</h2>
+        <p class="muted">Where the protected folder is right now. Each stage lights up as the system moves through it.</p>
+        <ol class="stepper" id="flow"></ol>
+      </div>
+      <div class="grid cards4" id="stat-cards"></div>
+      <div class="grid two">
+        <div class="card">
+          <h2>Activity</h2>
+          <ul class="timeline" id="timeline"></ul>
+        </div>
+        <div class="card">
+          <h2>How it works</h2>
+          <ol class="explain">
+            <li><b>Snapshot</b> — every file is hashed (SHA-256) and its entropy measured; only new content is uploaded to S3 (content-addressed, so encrypted rewrites can never overwrite a clean copy).</li>
+            <li><b>Detect</b> — the watcher scores 10-second windows of file activity (rewrite rate, entropy jump, odd extensions…) with a trained RandomForest. An alert opens an <i>incident</i> and marks later snapshots <span class="badge suspect">suspect</span>.</li>
+            <li><b>Explain</b> — the Claude agent searches backup history and recommends a restore point, citing snapshot ids. It cannot restore anything itself.</li>
+            <li><b>Restore</b> — you restore the last <span class="badge clean">clean</span> snapshot (dry run first). Every file is SHA-256 verified; encrypted leftovers are quarantined, never deleted.</li>
+          </ol>
+        </div>
+      </div>
+    </section>
+
+    <!-- SNAPSHOTS -->
+    <section id="tab-snapshots" class="tab">
+      <div class="card">
+        <div class="row between">
+          <div>
+            <h2>Snapshots</h2>
+            <p class="muted">Tick two snapshots and press <b>Compare</b> to see exactly what changed between them.</p>
+          </div>
+          <div class="row">
+            <input id="snap-label" class="input" placeholder="label (optional)" maxlength="255">
+            <button class="btn" id="snap-now">Snapshot now</button>
+            <button class="btn ghost" id="snap-compare" disabled>Compare selected</button>
+          </div>
+        </div>
+        <div class="table-wrap"><table id="snap-table"></table></div>
+      </div>
+      <div class="card hidden" id="diff-card"></div>
+      <div class="card hidden" id="snap-detail"></div>
+    </section>
+
+    <!-- DETECTION -->
+    <section id="tab-detection" class="tab">
+      <div class="grid two">
+        <div class="card" id="watcher-card"></div>
+        <div class="card" id="model-card"></div>
+      </div>
+      <div class="card">
+        <div class="row between">
+          <div>
+            <h2>On-demand scan</h2>
+            <p class="muted">Compares the latest snapshot with the folder on disk right now and scores the changes with the same model.</p>
+          </div>
+          <button class="btn" id="scan-now">Scan now</button>
+        </div>
+        <div id="scan-result"></div>
+      </div>
+      <div class="card">
+        <h2>Incidents</h2>
+        <div id="incident-list"></div>
+      </div>
+    </section>
+
+    <!-- RESTORE -->
+    <section id="tab-restore" class="tab">
+      <div class="card" id="restore-reco"></div>
+      <div class="grid two">
+        <div class="card">
+          <h2>Choose a snapshot</h2>
+          <div id="restore-candidates"></div>
+        </div>
+        <div class="card">
+          <h2>Restore options</h2>
+          <fieldset class="options">
+            <label class="opt"><input type="radio" name="target" value="separate" checked>
+              <span><b>Separate folder</b> (safe default)<br><span class="muted small" id="target-separate"></span></span></label>
+            <label class="opt"><input type="radio" name="target" value="inplace">
+              <span><b>In place</b> — overwrite the protected folder<br><span class="muted small" id="target-inplace"></span></span></label>
+            <label class="opt"><input type="checkbox" id="opt-quarantine" checked>
+              <span><b>Quarantine extra files</b> (in place only) — move <code>*.locked</code> copies and ransom notes aside instead of leaving them</span></label>
+            <label class="opt"><input type="checkbox" id="opt-force">
+              <span><b>Allow non-clean snapshot</b> (force) — only if you know what you are doing</span></label>
+          </fieldset>
+          <div class="row">
+            <button class="btn ghost" id="restore-dry">Dry run (no changes)</button>
+            <button class="btn danger" id="restore-go">Restore…</button>
+          </div>
+        </div>
+      </div>
+      <div class="card hidden" id="restore-result"></div>
+      <div class="card">
+        <h2>Restore history</h2>
+        <div class="table-wrap"><table id="jobs-table"></table></div>
+      </div>
+    </section>
+
+    <!-- AGENT -->
+    <section id="tab-agent" class="tab">
+      <div class="card">
+        <h2>Ask about your backups</h2>
+        <p class="muted">The agent reads backup metadata (snapshots, diffs, incidents, restores). It only <b>recommends</b> — restoring stays your decision.</p>
+        <div class="chips" id="example-qs"></div>
+        <div class="row ask">
+          <textarea id="question" class="input" rows="2" maxlength="2000" placeholder="e.g. What changed today, and is it safe to restore?"></textarea>
+          <button class="btn" id="ask-btn">Ask</button>
+        </div>
+      </div>
+      <div class="grid answer-grid hidden" id="answer-wrap">
+        <div class="card" id="answer"></div>
+        <div class="card" id="answer-meta"></div>
+      </div>
+    </section>
+
+    <!-- LAB -->
+    <section id="tab-lab" class="tab">
+      <div class="card warn-card">
+        <h2>Lab — safe attack simulation</h2>
+        <p>These buttons drive <code>simulator/fake_ransomware.py</code>. It only works inside the <code>sandbox/</code> folder, only touches files it created itself, and "encrypts" by writing random bytes — no real cryptography, no network.</p>
+      </div>
+      <div class="card">
+        <h2>Run the story</h2>
+        <ol class="lab-steps" id="lab-steps"></ol>
+      </div>
+      <div class="card">
+        <h2>Live watcher score</h2>
+        <p class="muted">Updated every few seconds. The bar turns red when a window crosses the model threshold.</p>
+        <div id="live-score"></div>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="confirm-dialog">
+    <form method="dialog">
+      <h3 id="confirm-title">Confirm</h3>
+      <div id="confirm-body"></div>
+      <div class="row end">
+        <button class="btn ghost" value="cancel">Cancel</button>
+        <button class="btn danger" value="ok" id="confirm-ok">Confirm</button>
+      </div>
+    </form>
+  </dialog>
+  <div id="toasts" aria-live="assertive"></div>
+</body>
+</html>

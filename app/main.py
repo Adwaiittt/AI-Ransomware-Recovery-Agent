@@ -6,14 +6,17 @@ import logging
 import threading
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI
+from fastapi.responses import RedirectResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.agent.embeddings import Embedder, make_embedder
 from app.agent.indexer import VectorIndex
 from app.agent.retriever import Retriever
-from app.api import agent, backup, detection, health, restore
+from app.api import agent, backup, detection, health, lab, restore
 from app.config import Settings, get_settings
 from app.db.session import init_db, make_engine, make_session_factory
 from app.detection.model import Detector, ModelNotAvailableError
@@ -21,6 +24,8 @@ from app.logging_config import RequestIdMiddleware, configure_logging
 from app.storage.s3_client import S3Storage, StorageError
 
 logger = logging.getLogger(__name__)
+
+UI_DIR = Path(__file__).parent / "ui"
 
 
 def _warm_embedder(index: VectorIndex) -> None:
@@ -52,6 +57,16 @@ def create_app(
         init_db(engine)
         app.state.settings = settings
         app.state.session_factory = make_session_factory(engine)
+        if (
+            storage is None
+            and settings.storage_mode == "local"
+            and not (settings.aws_access_key_id and settings.aws_secret_access_key)
+        ):
+            logger.error(
+                "STORAGE_MODE=local needs AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY "
+                "(the object store's credentials). Run `python scripts/init_env.py` or "
+                "copy .env.example to .env and fill them in. Backups will fail until then."
+            )
         app.state.storage = storage or S3Storage.from_settings(settings)
         settings.watch_dir.mkdir(parents=True, exist_ok=True)
         try:
@@ -90,6 +105,29 @@ def create_app(
     app.include_router(detection.router)
     app.include_router(restore.router)
     app.include_router(agent.router)
+    app.include_router(lab.router)
+
+    # Dashboard: static files only, calls the same JSON API (same origin).
+    app.mount("/ui", StaticFiles(directory=UI_DIR, html=True), name="ui")
+
+    @app.get("/", include_in_schema=False)
+    def root() -> RedirectResponse:
+        return RedirectResponse("/ui/")
+
+    @app.middleware("http")
+    async def ui_security_headers(request, call_next):  # type: ignore[no-untyped-def]
+        response = await call_next(request)
+        if request.url.path.startswith("/ui"):
+            # Strict CSP: no inline script/style, no third-party origins. Data shown
+            # in the UI (file names!) comes from a disk ransomware controls.
+            response.headers["Content-Security-Policy"] = (
+                "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; "
+                "connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
+            )
+            response.headers["X-Content-Type-Options"] = "nosniff"
+            response.headers["Referrer-Policy"] = "no-referrer"
+        return response
+
     return app
 
 

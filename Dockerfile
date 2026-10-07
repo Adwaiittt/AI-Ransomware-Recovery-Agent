@@ -17,14 +17,11 @@ RUN python -m venv /opt/venv
 ENV PATH=/opt/venv/bin:$PATH \
     HF_HOME=/opt/hf-cache
 
-# CPU-only torch first: the default Linux wheel bundles CUDA (~2.5 GB extra).
-RUN pip install --index-url https://download.pytorch.org/whl/cpu torch
-
-# Install only the dependency list from pyproject.toml (not the package itself),
-# so this layer is cached until dependencies change, not on every code edit.
-COPY pyproject.toml ./
-RUN python -c "import tomllib; print('\n'.join(tomllib.load(open('pyproject.toml','rb'))['project']['dependencies']))" > /tmp/requirements.txt \
- && pip install -r /tmp/requirements.txt
+# Exact, tested versions (requirements.lock). The extra index provides the
+# CPU-only torch build; the default Linux wheel bundles CUDA (~2.5 GB extra).
+# Copied before the source so this layer is reused until dependencies change.
+COPY requirements.lock ./
+RUN pip install --extra-index-url https://download.pytorch.org/whl/cpu -r requirements.lock
 
 # Pre-download the embedding model into the image (runtime runs offline).
 RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"

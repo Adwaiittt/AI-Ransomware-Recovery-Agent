@@ -187,13 +187,47 @@ def attack(
     return touched
 
 
+# -- benign ---------------------------------------------------------------------
+def benign_activity(target: Path, sandbox_root: Path = SANDBOX_ROOT) -> list[str]:
+    """Normal user work for comparison: edit a few notes and build a zip archive.
+
+    The zip is high-entropy *by design* - a good check that the detector does not
+    alert on compressed formats. Edited files no longer match their seeded hash,
+    so a later ``attack`` skips them (the safety rule in action). Created files
+    are recorded in the manifest so ``clean`` removes them.
+    """
+    import zipfile
+
+    target = validate_target(target, sandbox_root)
+    mpath = target / MANIFEST_NAME
+    seeded = _load_manifest(target)
+    touched: list[str] = []
+    for rel in sorted(r for r in seeded if r.endswith(".txt"))[:5]:
+        p = target / rel
+        if p.is_file() and not p.is_symlink():
+            with p.open("a", encoding="utf-8") as fh:
+                fh.write("follow-up action item\n")
+            touched.append(rel)
+    manifest = json.loads(mpath.read_text())
+    extras: list[str] = manifest.setdefault("extras", [])
+    zip_rel = f"docs/archive_{len(extras) + 1:02d}.zip"
+    with zipfile.ZipFile(target / zip_rel, "w", zipfile.ZIP_DEFLATED) as zf:
+        for rel in sorted(r for r in seeded if r.endswith(".csv"))[:10]:
+            if (target / rel).is_file():
+                zf.write(target / rel, Path(rel).name)
+    extras.append(zip_rel)
+    mpath.write_text(json.dumps(manifest, indent=2))
+    return [*touched, zip_rel]
+
+
 # -- clean ----------------------------------------------------------------------
 def clean(target: Path, sandbox_root: Path = SANDBOX_ROOT) -> int:
     """Delete only simulator-created files (seeded, .locked variants, note, manifest)."""
     target = validate_target(target, sandbox_root)
     seeded = _load_manifest(target)
+    extras = json.loads((target / MANIFEST_NAME).read_text()).get("extras", [])
     removed = 0
-    for rel in seeded:
+    for rel in [*seeded, *extras]:
         for candidate in (target / rel, target / (rel + FAKE_EXT)):
             p = candidate.resolve()
             if p.is_relative_to(target) and p.is_file() and not candidate.is_symlink():

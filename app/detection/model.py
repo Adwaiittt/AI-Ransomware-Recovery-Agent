@@ -46,7 +46,12 @@ class Detector:
 
     @classmethod
     def load(cls, path: Path) -> Detector:
-        """Load a bundle from disk or raise ModelNotAvailableError."""
+        """Load a bundle from disk or raise ModelNotAvailableError.
+
+        Security: joblib uses pickle, so loading runs code from the file. Only
+        load models you trained yourself (``python -m ml.train``) - never a
+        model file downloaded from someone else.
+        """
         if not path.is_file():
             raise ModelNotAvailableError(f"No model at {path}. Run `make train` first.")
         return cls(joblib.load(path))

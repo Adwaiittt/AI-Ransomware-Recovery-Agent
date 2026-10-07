@@ -63,6 +63,10 @@ class Settings(BaseSettings):
     # Database
     database_url: str = "sqlite:///./data/metadata.db"
 
+    # Dashboard "Lab" tab: lets the UI drive the SAFE simulator. Off by default;
+    # docker compose enables it for the local demo.
+    enable_lab: bool = False
+
     log_level: str = "INFO"
     log_format: Literal["json", "text"] = "json"
     # watchdog's inotify backend misses events on some bind mounts (e.g. Windows

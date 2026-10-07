@@ -180,7 +180,7 @@ def main() -> None:
         "generated_at": datetime.now(UTC).isoformat(),
         "sklearn_version": sklearn.__version__,
         "dataset": {
-            "path": str(args.data),
+            "path": args.data.as_posix(),
             "rows": len(df),
             "train_rows": len(train_df),
             "test_rows": len(test_df),

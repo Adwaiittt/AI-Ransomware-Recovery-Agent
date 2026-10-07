@@ -10,15 +10,15 @@ SIM_MODE ?= fast
 help: ## list targets
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-10s %s\n", $$1, $$2}'
 
-env: ## create .env from the example if missing
-	@test -f .env || (cp .env.example .env && echo "created .env - set AWS_SECRET_ACCESS_KEY / ANTHROPIC_API_KEY")
+env: ## create .env from .env.example with a random object-store secret (if missing)
+	$(PY) scripts/init_env.py
 
 install: ## local dev install (venv recommended)
 	$(PY) -m pip install -e ".[dev]"
 
 up: env ## build and start s3 + api + watcher
 	$(COMPOSE) up -d --build
-	@echo "API http://localhost:8000/docs  |  object store console http://localhost:9001"
+	@echo "Dashboard http://localhost:8000  |  API docs /docs  |  object store console http://localhost:9001"
 
 down: ## stop the stack (volumes kept)
 	$(COMPOSE) down

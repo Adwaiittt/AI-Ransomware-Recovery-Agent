@@ -138,7 +138,11 @@ def build_chunks(session: Session) -> list[ChunkSpec]:
     chunks = [_snapshot_chunk(s) for s in snaps]
     chunks += [_diff_chunk(a, b) for a, b in zip(snaps, snaps[1:], strict=False)]
     chunks += [_incident_chunk(i) for i in session.scalars(select(Incident))]
-    chunks += [_restore_chunk(j) for j in session.scalars(select(RestoreJob))]
+    # Dry runs change nothing; indexing them let planning noise outrank the
+    # incidents and diffs that actually answer "what happened?" (seen in the UI).
+    # They remain in restore_jobs / GET /restore/jobs for auditing.
+    real_jobs = select(RestoreJob).where(RestoreJob.dry_run.is_(False))
+    chunks += [_restore_chunk(j) for j in session.scalars(real_jobs)]
     return chunks
 
 
